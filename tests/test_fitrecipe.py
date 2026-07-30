@@ -95,7 +95,7 @@ class TestFitRecipe(unittest.TestCase):
         self.assertFalse(recipe.is_free(recipe.A))
         self.assertFalse(recipe.is_free(recipe.k))
         self.assertFalse(recipe.is_free(recipe.c))
-        self.assertFalse(recipe.isFree(recipe.B))
+        self.assertFalse(recipe.is_free(recipe.B))
 
         self.assertRaises(ValueError, recipe.free, "junk")
         self.assertRaises(ValueError, recipe.fix, tagA=1)
@@ -150,53 +150,36 @@ class TestFitRecipe(unittest.TestCase):
         self.assertTrue(2 in values)
         return
 
-    def testVars(self):
-        """Test to see if variables are added and removed properly."""
+    def testVars_deprecated(self):
+        """Deprecated variable-management aliases should still work but
+        emit a DeprecationWarning and delegate to their replacements."""
         recipe = self.recipe
         con = self.fitcontribution
 
-        recipe.add_variable(con.A, 2)
-        recipe.add_variable(con.k, 1)
-        recipe.addVar(con.c, 0)
-        recipe.newVar("B", 0)
+        with self.assertWarns(DeprecationWarning):
+            a = recipe.addVar(con.A, 2)
+        self.assertIs(a, recipe.A)
 
-        names = recipe.get_names()
-        self.assertEqual(names, ["A", "k", "c", "B"])
-        values = recipe.get_values()
-        self.assertTrue((values == [2, 1, 0, 0]).all())
+        with self.assertWarns(DeprecationWarning):
+            b = recipe.newVar("B", 0)
+        self.assertIs(b, recipe.B)
 
-        # Constrain a parameter to the B-variable to give it a value
         p = Parameter("Bpar", -1)
-        recipe.constrain(recipe.B, p)
-        values = recipe.get_values()
-        self.assertTrue((values == [2, 1, 0]).all())
-        recipe.delVar(recipe.B)
+        with self.assertWarns(DeprecationWarning):
+            recipe.constrain(recipe.B, p)
+        self.assertTrue(recipe.B.constrained)
 
-        recipe.fix(recipe.k)
+        with self.assertWarns(DeprecationWarning):
+            recipe.delVar(recipe.B)
+        self.assertFalse(hasattr(recipe, "B"))
 
-        names = recipe.get_names()
-        self.assertEqual(names, ["A", "c"])
-        values = recipe.get_values()
-        self.assertTrue((values == [2, 0]).all())
+        with self.assertWarns(DeprecationWarning):
+            names = recipe.getNames()
+        self.assertEqual(names, recipe.get_names())
 
-        recipe.fix("all")
-        names = recipe.get_names()
-        self.assertEqual(names, [])
-        values = recipe.get_values()
-        self.assertTrue((values == []).all())
-
-        recipe.free("all")
-        names = recipe.getNames()
-        self.assertEqual(3, len(names))
-        self.assertTrue("A" in names)
-        self.assertTrue("k" in names)
-        self.assertTrue("c" in names)
-        values = recipe.getValues()
-        self.assertEqual(3, len(values))
-        self.assertTrue(0 in values)
-        self.assertTrue(1 in values)
-        self.assertTrue(2 in values)
-        return
+        with self.assertWarns(DeprecationWarning):
+            values = recipe.getValues()
+        self.assertTrue((values == recipe.get_values()).all())
 
     def testResidual(self):
         """Test the residual and everything that can change it."""
@@ -276,7 +259,7 @@ class TestFitRecipe(unittest.TestCase):
         # Remove those
         self.fitcontribution.remove_soft_bounds(r1)
         self.recipe._ready = False
-        self.fitcontribution.unconstrain(self.fitcontribution.c)
+        self.fitcontribution.remove_constraint(self.fitcontribution.c)
         self.fitcontribution.c.set_value(0)
         res = self.recipe.residual()
         chi2 = 0
@@ -300,27 +283,21 @@ class TestFitRecipe(unittest.TestCase):
 
 
 # ----------------------------------------------------------------------------
-def test_boundsToRestraints():
+def test_boundsToRestraints_deprecated():
+    """Deprecated boundsToRestraints should still work but emit a
+    DeprecationWarning and delegate to convert_bounds_to_restraints."""
     recipe = FitRecipe("recipe")
-
-    # create a bounded variable
     recipe.create_new_variable("var1", 1)
-    expected_lower_bound = -1
-    expected_upper_bound = 1
-    expected_sigma = 2
-    recipe.var1.bounds = (expected_lower_bound, expected_upper_bound)
+    recipe.var1.bounds = (-1, 1)
 
-    # apply restraints from bounds
-    recipe.boundsToRestraints(sig=expected_sigma, scaled=True)
+    with pytest.deprecated_call():
+        recipe.boundsToRestraints(sig=2, scaled=True)
     restraints = list(recipe._restraints)
     assert len(restraints) == 1
     r = restraints[0]
-    actual_lower_bound = r.lower_bound
-    actual_upper_bound = r.upper_bound
-    actual_sigma = r.sig
-    assert actual_lower_bound == expected_lower_bound
-    assert actual_upper_bound == expected_upper_bound
-    assert actual_sigma == expected_sigma
+    assert r.lower_bound == -1
+    assert r.upper_bound == 1
+    assert r.sig == 2
     assert r.scaled is True
 
 
@@ -359,82 +336,6 @@ def testPrintFitHook(capturestdout):
     fitcontribution.k.set_value(1)
     fitcontribution.c.set_value(0)
 
-    recipe.addContribution(fitcontribution)
-
-    recipe.add_variable(fitcontribution.c)
-    recipe.add_soft_bounds("c", lower_bound=5)
-    (pfh,) = recipe.getFitHooks()
-    out = capturestdout(recipe.scalar_residual)
-    assert "" == out
-    pfh.verbose = 1
-    out = capturestdout(recipe.scalar_residual)
-    assert out.strip().isdigit()
-    assert "\nRestraints:" not in out
-    pfh.verbose = 2
-    out = capturestdout(recipe.scalar_residual)
-    assert "\nResidual:" in out
-    assert "\nRestraints:" in out
-    assert "\nVariables" not in out
-    pfh.verbose = 3
-    out = capturestdout(recipe.scalarResidual)
-    assert "\nVariables" in out
-    assert "c = " in out
-    return
-
-
-def test_add_and_remove_ParameterSet():
-    # add a parset
-    recipe = FitRecipe("recipe")
-    parameter_to_add = Parameter("added_param", 1)
-    recipe.addParameterSet(parameter_to_add)
-    # check that the parameter is added
-    assert recipe.added_param == parameter_to_add
-    assert recipe.added_param.value == 1
-    # remove the added parameter
-    recipe.removeParameterSet(parameter_to_add)
-    # check that the parameter is removed
-    assert not hasattr(recipe, "added_param")
-
-
-def test_add_and_remove_parameter_set():
-    recipe = FitRecipe("recipe")
-    parameter_to_add = Parameter("added_param", 1)
-    # add a parset
-    recipe.add_parameter_set(parameter_to_add)
-    # check that the parameter is added
-    assert recipe.added_param == parameter_to_add
-    assert recipe.added_param.value == 1
-    # remove the added parameter
-    recipe.remove_parameter_set(parameter_to_add)
-    # check that the parameter is removed
-    assert not hasattr(recipe, "added_param")
-
-
-def test_add_contribution(capturestdout):
-    """Duplicated test of PrintFitHooks except addContribution method
-    has changed to the new add_contribution method. This is because
-    addContribution is deprecated.
-
-    Remove this test after addContribution is removed and update
-    testPrintFitHook to use add_contribution instead of addContribution.
-    """
-    recipe = FitRecipe("recipe")
-    recipe.fithooks[0].verbose = 0
-
-    # Set up the Profile
-    profile = Profile()
-    x = linspace(0, pi, 10)
-    y = sin(x)
-    profile.set_observed_profile(x, y)
-
-    # Set up the FitContribution
-    fitcontribution = FitContribution("cont")
-    fitcontribution.set_profile(profile)
-    fitcontribution.set_equation("A*sin(k*x + c)")
-    fitcontribution.A.set_value(1)
-    fitcontribution.k.set_value(1)
-    fitcontribution.c.set_value(0)
-
     recipe.add_contribution(fitcontribution)
 
     recipe.add_variable(fitcontribution.c)
@@ -456,6 +357,60 @@ def test_add_contribution(capturestdout):
     assert "\nVariables" in out
     assert "c = " in out
     return
+
+
+def test_add_contribution_and_fit_hooks_deprecated():
+    """Deprecated addContribution/getFitHooks/scalarResidual should
+    still work but emit a DeprecationWarning and delegate to their
+    replacements."""
+    recipe = FitRecipe("recipe")
+    profile = Profile()
+    x = linspace(0, pi, 10)
+    profile.set_observed_profile(x, sin(x))
+    fitcontribution = FitContribution("cont")
+    fitcontribution.set_profile(profile)
+    fitcontribution.set_equation("A*sin(x)")
+    fitcontribution.A.set_value(1)
+
+    with pytest.deprecated_call():
+        recipe.addContribution(fitcontribution)
+    assert recipe.cont is fitcontribution
+
+    with pytest.deprecated_call():
+        hooks = recipe.getFitHooks()
+    assert hooks == recipe.get_fit_hooks()
+
+    with pytest.deprecated_call():
+        residual = recipe.scalarResidual()
+    assert residual == recipe.scalar_residual()
+
+
+def test_add_and_remove_ParameterSet_deprecated():
+    """Deprecated addParameterSet/removeParameterSet should still work
+    but emit a DeprecationWarning and delegate to their replacements."""
+    recipe = FitRecipe("recipe")
+    parameter_to_add = Parameter("added_param", 1)
+    with pytest.deprecated_call():
+        recipe.addParameterSet(parameter_to_add)
+    assert recipe.added_param == parameter_to_add
+    assert recipe.added_param.value == 1
+    with pytest.deprecated_call():
+        recipe.removeParameterSet(parameter_to_add)
+    assert not hasattr(recipe, "added_param")
+
+
+def test_add_and_remove_parameter_set():
+    recipe = FitRecipe("recipe")
+    parameter_to_add = Parameter("added_param", 1)
+    # add a parset
+    recipe.add_parameter_set(parameter_to_add)
+    # check that the parameter is added
+    assert recipe.added_param == parameter_to_add
+    assert recipe.added_param.value == 1
+    # remove the added parameter
+    recipe.remove_parameter_set(parameter_to_add)
+    # check that the parameter is removed
+    assert not hasattr(recipe, "added_param")
 
 
 def optimize_recipe(recipe):

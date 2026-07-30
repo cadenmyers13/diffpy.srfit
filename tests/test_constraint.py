@@ -44,10 +44,10 @@ class TestConstraint(unittest.TestCase):
 
         eq2 = get_equation_from_string("2*p2+1", factory)
         c2 = Constraint()
-        self.assertRaises(ValueError, c2.constrain, p1, eq2)
+        self.assertRaises(ValueError, c2.add_constraint, p1, eq2)
         p2.set_constant()
         eq3 = get_equation_from_string("p1", factory)
-        self.assertRaises(ValueError, c2.constrain, p2, eq3)
+        self.assertRaises(ValueError, c2.add_constraint, p2, eq3)
 
         p2.set_value(2.5)
         c.update()
@@ -62,40 +62,26 @@ class TestConstraint(unittest.TestCase):
 
 class TestConstraint_deprecated(unittest.TestCase):
 
-    def testConstraint(self):
-        """Test the Constraint class."""
+    def test_constrain_and_setConst_deprecated(self):
+        """Deprecated Constraint.constrain and Parameter.setConst should
+        still work but emit a DeprecationWarning and delegate to their
+        replacements."""
         p1 = Parameter("p1", 1)
         p2 = Parameter("p2", 2)
 
         factory = EquationFactory()
-
         factory.registerArgument("p1", p1)
         factory.registerArgument("p2", p2)
 
         c = Constraint()
-        # Constrain p1 = 2*p2
         eq = get_equation_from_string("2*p2", factory)
-        c.constrain(p1, eq)
-
+        with self.assertWarns(DeprecationWarning):
+            c.constrain(p1, eq)
         self.assertTrue(p1.constrained)
-        self.assertFalse(p2.constrained)
 
-        eq2 = get_equation_from_string("2*p2+1", factory)
-        c2 = Constraint()
-        self.assertRaises(ValueError, c2.constrain, p1, eq2)
-        p2.setConst()
-        eq3 = get_equation_from_string("p1", factory)
-        self.assertRaises(ValueError, c2.constrain, p2, eq3)
-
-        p2.set_value(2.5)
-        c.update()
-        self.assertEqual(5.0, p1.getValue())
-
-        p2.set_value(8.1)
-        self.assertEqual(5.0, p1.getValue())
-        c.update()
-        self.assertEqual(16.2, p1.getValue())
-        return
+        with self.assertWarns(DeprecationWarning):
+            p2.setConst()
+        self.assertTrue(p2.const)
 
 
 if __name__ == "__main__":

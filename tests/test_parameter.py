@@ -39,7 +39,7 @@ class TestParameter(unittest.TestCase):
         import numpy
 
         x = numpy.arange(0, 10, 0.1)
-        par_l.setValue(x)
+        par_l.set_value(x)
         self.assertTrue(par_l.getValue() is x)
         self.assertTrue(par_l.value is x)
 
@@ -53,6 +53,15 @@ class TestParameter(unittest.TestCase):
         par_l.set_value(1.01)
         self.assertAlmostEqual(1.01, par_l.getValue())
         self.assertAlmostEqual(1.01, par_l.value)
+        return
+
+    def testSetValue_deprecated(self):
+        """Deprecated setValue should still work but emit a
+        DeprecationWarning and delegate to set_value."""
+        par_l = Parameter("l")
+        with self.assertWarns(DeprecationWarning):
+            par_l.setValue(3.14)
+        self.assertAlmostEqual(3.14, par_l.value)
         return
 
 
@@ -147,27 +156,13 @@ def test_bound_range(lower, upper, expected):
     assert actual == expected
 
 
-@pytest.mark.parametrize(
-    "lower, upper, expected",
-    [
-        # User sets both lower and upper bounds explicitly.
-        (1, 10, [1, 10]),
-        # User sets only a lower bound.
-        (2, None, [2, np.inf]),
-        # User sets only an upper bound.
-        (None, 8, [-np.inf, 8]),
-        # User overwrites existing bounds.
-        (2, 6, [2, 6]),
-    ],
-)
-def test_boundRange(lower, upper, expected):
+def test_boundRange_deprecated():
+    """Deprecated boundRange should still work but emit a
+    DeprecationWarning and delegate to bound_range."""
     p = Parameter("a", value=5)
-    # If testing overwrite, pre-set bounds to see overwrite effect
-    if expected == [2, 6]:
-        p.boundRange(0, 10)
-    p.boundRange(lower_bound=lower, upper_bound=upper)
-    actual = p.bounds
-    assert actual == expected
+    with pytest.deprecated_call():
+        p.boundRange(lower_bound=1, upper_bound=10)
+    assert p.bounds == [1, 10]
 
 
 @pytest.mark.parametrize(
@@ -192,26 +187,13 @@ def test_bound_window(value, lower_radius, upper_radius, expected):
     assert actual == expected
 
 
-@pytest.mark.parametrize(
-    "value, lower_radius, upper_radius, expected",
-    [
-        # Symmetric radius (upper_radius None, uses lower_radius)
-        (10, 2, None, [8, 12]),
-        # Asymmetric radius
-        (10, 3, 5, [7, 15]),
-        # Zero radius
-        (4, 0, None, [4, 4]),
-        # Current value updated before bounding
-        (20, 2, None, [18, 22]),
-    ],
-)
-def test_boundWindow(value, lower_radius, upper_radius, expected):
-    p = Parameter("a", value=5)
-    if value != 5:
-        p.set_value(value)
-    p.boundWindow(lr=lower_radius, ur=upper_radius)
-    actual = p.bounds
-    assert actual == expected
+def test_boundWindow_deprecated():
+    """Deprecated boundWindow should still work but emit a
+    DeprecationWarning and delegate to bound_window."""
+    p = Parameter("a", value=10)
+    with pytest.deprecated_call():
+        p.boundWindow(lr=2, ur=None)
+    assert p.bounds == [8, 12]
 
 
 if __name__ == "__main__":

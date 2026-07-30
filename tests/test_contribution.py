@@ -48,7 +48,7 @@ class TestContribution(unittest.TestCase):
         self.assertTrue(fc._reseq is None)
         # check type checking
         fc1 = FitContribution("test1")
-        self.assertRaises(TypeError, fc1.setProfile, "invalid")
+        self.assertRaises(TypeError, fc1.set_profile, "invalid")
         # check if residual equation is set up when possible
         fc2 = FitContribution("test2")
         fc2.set_equation("A * x")
@@ -56,14 +56,16 @@ class TestContribution(unittest.TestCase):
         self.assertFalse(fc2._reseq is None)
         return
 
-    def testAddProfileGenerator(self):
+    def testAddProfileGenerator_deprecated(self):
+        """Deprecated addProfileGenerator should still work but emit a
+        DeprecationWarning and delegate to add_profile_generator."""
         fc = self.fitcontribution
         gen = self.gen
-        fc.addProfileGenerator(gen, "gen")
+        with self.assertWarns(DeprecationWarning):
+            fc.addProfileGenerator(gen, "gen")
 
         xobs = arange(0, 10, 0.5)
         self.assertTrue(array_equal(xobs, gen(xobs)))
-
         self.assertTrue(gen.profile is None)
         self.assertTrue(fc._eq is not None)
         return
@@ -168,14 +170,18 @@ class TestContribution(unittest.TestCase):
         self.assertEqual("(2 * (eq - y))", fc.get_residual_equation())
         return
 
-    def test_getResidualEquation(self):
-        """Check getting the current formula for residual equation."""
+    def test_getResidualEquation_deprecated(self):
+        """Deprecated getResidualEquation/setResidualEquation should
+        still work but emit a DeprecationWarning and delegate to their
+        replacements."""
         fc = self.fitcontribution
-        self.assertEqual("", fc.get_residual_equation())
         fc.set_profile(self.profile)
         fc.set_equation("A * x + B")
-        self.assertEqual("((eq - y) / dy)", fc.getResidualEquation())
-        fc.setResidualEquation("2 * (eq - y)")
+        with self.assertWarns(DeprecationWarning):
+            result = fc.getResidualEquation()
+        self.assertEqual(fc.get_residual_equation(), result)
+        with self.assertWarns(DeprecationWarning):
+            fc.setResidualEquation("2 * (eq - y)")
         self.assertEqual("(2 * (eq - y))", fc.get_residual_equation())
         return
 
@@ -297,16 +303,14 @@ def testResidual(noObserversInGlobalBuilders):
     return
 
 
-def test_setEquation(noObserversInGlobalBuilders):
-    """Check replacement of removed parameters."""
+def test_setEquation_deprecated(noObserversInGlobalBuilders):
+    """Deprecated setEquation should still work but emit a
+    DeprecationWarning and delegate to set_equation."""
     fc = FitContribution("test")
-    fc.setEquation("x + 5")
+    with pytest.deprecated_call():
+        fc.setEquation("x + 5")
     fc.x.set_value(2)
     assert 7 == fc.evaluate()
-    fc.removeParameter(fc.x)
-    x = arange(0, 10, 0.5)
-    fc.newParameter("x", x)
-    assert np.array_equal(5 + x, fc.evaluate())
     assert noObserversInGlobalBuilders
     return
 
@@ -325,12 +329,14 @@ def test_set_equation(noObserversInGlobalBuilders):
     return
 
 
-def test_getEquation(noObserversInGlobalBuilders):
-    """Check getting the current profile simulation formula."""
+def test_getEquation_deprecated(noObserversInGlobalBuilders):
+    """Deprecated getEquation should still work but emit a
+    DeprecationWarning and delegate to get_equation."""
     fc = FitContribution("test")
-    assert "" == fc.get_equation()
     fc.set_equation("A * sin(x + 5)")
-    assert "(A * sin((x + 5)))" == fc.getEquation()
+    with pytest.deprecated_call():
+        result = fc.getEquation()
+    assert fc.get_equation() == result
     assert noObserversInGlobalBuilders
     return
 

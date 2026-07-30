@@ -32,9 +32,15 @@ from diffpy.srfit.pdf import PDFContribution, PDFGenerator, PDFParser
 
 
 def testParser1(datafile):
+    # PDFParser.parseFile is deprecated in favor of parse_file, but it is
+    # not a delegating alias: parseFile routes through PDFParser.parseString,
+    # which extracts PDF-specific metadata (stype, qmax, temperature) that
+    # parse_file does not. Keep exercising parseFile here until parse_file
+    # covers that metadata.
     data = datafile("ni-q27r100-neutron.gr")
     parser = PDFParser()
-    parser.parseFile(data)
+    with pytest.deprecated_call():
+        parser.parseFile(data)
 
     meta = parser._meta
 
@@ -167,7 +173,7 @@ def testGenerator(diffpy_srreal_available, datafile):
 
     calc = gen._calc
     # Test parameters
-    for par in gen.iterPars(recurse=False):
+    for par in gen.iterate_over_parameters(recurse=False):
         pname = par.name
         defval = calc._getDoubleAttr(pname)
         assert defval == par.getValue()
@@ -347,6 +353,20 @@ def _make_iterpars_tree():
         "o0": o0,
         "o0_biso": o0_biso,
     }
+
+
+def test_iterPars_deprecated():
+    """Deprecated iterPars should still work but emit a
+    DeprecationWarning and delegate to iterate_over_parameters."""
+    objs = _make_iterpars_tree()
+    root = objs["root"]
+
+    with pytest.deprecated_call():
+        values = [parameter.value for parameter in root.iterPars(r"^Biso$")]
+    assert values == [
+        parameter.value
+        for parameter in root.iterate_over_parameters(r"^Biso$")
+    ]
 
 
 @pytest.mark.parametrize(

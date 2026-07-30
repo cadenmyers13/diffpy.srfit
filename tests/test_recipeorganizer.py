@@ -59,7 +59,7 @@ class TestEquationFromString(unittest.TestCase):
         )
 
         # Pass that argument in the ns dictionary
-        eq = equationFromString("p1+p2+p3", factory, {"p3": p3})
+        eq = get_equation_from_string("p1+p2+p3", factory, {"p3": p3})
         self.assertEqual(3, len(eq.args))
         self.assertTrue(p1 in eq.args)
         self.assertTrue(p2 in eq.args)
@@ -83,6 +83,17 @@ class TestEquationFromString(unittest.TestCase):
             ValueError, get_equation_from_string, "p1+p2", factory, {"p2": p4}
         )
 
+        return
+
+    def test_equationFromString_deprecated(self):
+        """Deprecated equationFromString should still work but emit a
+        DeprecationWarning and delegate to get_equation_from_string."""
+        p1 = Parameter("p1", 1)
+        factory = EquationFactory()
+        factory.registerArgument("p1", p1)
+        with self.assertWarns(DeprecationWarning):
+            eq = equationFromString("p1+1", factory)
+        self.assertEqual(2, eq())
         return
 
 
@@ -272,12 +283,6 @@ class TestRecipeOrganizer(unittest.TestCase):
         self.assertEqual(0, len(self.m._constraints))
         self.m.add_constraint(p1, "2*p2")
 
-        actual_constrained_params = self.m.getConstrainedPars()
-        actual_constrained_params = [p.name for p in actual_constrained_params]
-        expected_constrained_params = [p1.name]
-
-        assert actual_constrained_params == expected_constrained_params
-
         actual_constrained_params = self.m.get_constrained_parmeters()
         actual_constrained_params = [p.name for p in actual_constrained_params]
         expected_constrained_params = [p1.name]
@@ -294,14 +299,16 @@ class TestRecipeOrganizer(unittest.TestCase):
         self.assertEqual(20, p1.getValue())
 
         # Check errors on unregistered parameters
-        self.assertRaises(ValueError, self.m.constrain, p1, "2*p3")
-        self.assertRaises(ValueError, self.m.constrain, p1, "2*p2", {"p2": p3})
+        self.assertRaises(ValueError, self.m.add_constraint, p1, "2*p3")
+        self.assertRaises(
+            ValueError, self.m.add_constraint, p1, "2*p2", {"p2": p3}
+        )
 
         # Remove the constraint
         self.m.remove_constraint(p1)
         self.assertFalse(p1.constrained)
         self.assertEqual(0, len(self.m._constraints))
-        self.assertFalse(self.m.isConstrained(p1))
+        self.assertFalse(self.m.is_constrained(p1))
 
         # Try an straight constraint
         self.m.add_constraint(p1, p2)
@@ -315,23 +322,36 @@ class TestRecipeOrganizer(unittest.TestCase):
         expected_constrained_params = []
         assert actual_constrained_params == expected_constrained_params
 
-        # add constraint back and test the old function name `clearConstraints`
-        self.m.add_constraint(p1, p2)
-        actual_constrained_params = self.m.get_constrained_parmeters()
-        actual_constrained_params = [p.name for p in actual_constrained_params]
-        expected_constrained_params = [p1.name]
-        assert actual_constrained_params == expected_constrained_params
+        return
 
-        self.m.clearConstraints()
-        actual_constrained_params = self.m.get_constrained_parmeters()
-        actual_constrained_params = [p.name for p in actual_constrained_params]
-        expected_constrained_params = []
-        assert actual_constrained_params == expected_constrained_params
+    def test_constrain_parameter_deprecated(self):
+        """Deprecated constrain/getConstrainedPars/isConstrained/
+        clearConstraints should still work but emit a DeprecationWarning
+        and delegate to their replacements."""
+        p1 = self.m._new_parameter("p1", 1)
+        self.m._new_parameter("p2", 2)
 
+        with self.assertWarns(DeprecationWarning):
+            self.m.constrain(p1, "2*p2")
+        self.assertTrue(p1.constrained)
+
+        with self.assertWarns(DeprecationWarning):
+            constrained_params = self.m.getConstrainedPars()
+        self.assertEqual(
+            [p.name for p in constrained_params],
+            [p.name for p in self.m.get_constrained_parmeters()],
+        )
+
+        with self.assertWarns(DeprecationWarning):
+            self.assertTrue(self.m.isConstrained(p1))
+
+        with self.assertWarns(DeprecationWarning):
+            self.m.clearConstraints()
+        self.assertFalse(p1.constrained)
         return
 
     def test_add_restraint(self):
-        """Test the restrain method."""
+        """Test the add_soft_bounds method."""
         p1 = Parameter("p1", 1)
         p2 = Parameter("p2", 2)
         p3 = Parameter("p3", 3)
@@ -346,16 +366,28 @@ class TestRecipeOrganizer(unittest.TestCase):
         self.m.remove_soft_bounds(r)
         self.assertEqual(0, len(self.m._restraints))
 
-        r = self.m.restrain(p1, upper_bound=10)
+        r = self.m.add_soft_bounds(p1, upper_bound=10)
         self.assertEqual(1, len(self.m._restraints))
         p1.set_value(11)
         self.assertEqual(1, r.penalty())
 
         # Check errors on unregistered parameters
-        self.assertRaises(ValueError, self.m.restrain, "2*p3")
+        self.assertRaises(ValueError, self.m.add_soft_bounds, "2*p3")
         self.assertRaises(
-            ValueError, self.m.restrain, "2*p2", params={"p2": p3}
+            ValueError, self.m.add_soft_bounds, "2*p2", params={"p2": p3}
         )
+        return
+
+    def test_restrain_deprecated(self):
+        """Deprecated restrain should still work but emit a
+        DeprecationWarning and delegate to add_soft_bounds."""
+        p1 = Parameter("p1", 1)
+        self.m._eqfactory.registerArgument("p1", p1)
+        with self.assertWarns(DeprecationWarning):
+            r = self.m.restrain(p1, upper_bound=10)
+        self.assertEqual(1, len(self.m._restraints))
+        p1.set_value(11)
+        self.assertEqual(1, r.penalty())
         return
 
     def testGetConstraints(self):
@@ -457,49 +489,29 @@ class TestRecipeOrganizer(unittest.TestCase):
 
         return
 
-    def testRegisterCalculator(self):
+    def testRegisterCalculator_deprecated(self):
+        """Deprecated registerCalculator should still work but emit a
+        DeprecationWarning and delegate to register_calculator."""
 
         class GCalc(Calculator):
 
             def __init__(self, name):
                 Calculator.__init__(self, name)
                 self.newParameter("A", 1.0)
-                self.newParameter("center", 0.0)
-                self.newParameter("width", 0.1)
                 return
 
             def __call__(self, x):
-                A = self.A.getValue()
-                c = self.center.getValue()
-                w = self.width.getValue()
-                return A * numpy.exp(-0.5 * ((x - c) / w) ** 2)
+                return self.A.getValue() * x
 
         # End class GCalc
 
         g = GCalc("g")
-
-        self.m.registerCalculator(g)
+        with self.assertWarns(DeprecationWarning):
+            self.m.registerCalculator(g)
 
         x = numpy.arange(0.5, 10, 0.5)
         self.m.x.set_value(x)
-
-        self.m.g.center.set_value(3.0)
-
-        self.assertTrue(
-            numpy.array_equal(numpy.exp(-0.5 * ((x - 3.0) / 0.1) ** 2), g(x))
-        )
-
-        self.m.g.center.set_value(5.0)
-
-        self.assertTrue(
-            numpy.array_equal(numpy.exp(-0.5 * ((x - 5.0) / 0.1) ** 2), g(x))
-        )
-
-        # Use this in another equation
-
-        eq = self.m.register_string_function("g/x - 1", "pdf")
-        self.assertTrue(numpy.array_equal(g(x) / x - 1, eq()))
-
+        self.assertTrue(numpy.array_equal(g(x), x))
         return
 
     def testRegisterFunction(self):
@@ -547,9 +559,22 @@ class TestRecipeOrganizer(unittest.TestCase):
         self.assertAlmostEqual(1.23, eq())
 
         # Now the callable
-        eq2 = self.m.registerFunction(t, "eval2")
+        eq2 = self.m.register_function(t, "eval2")
         self.assertAlmostEqual(4.56, eq2())
 
+        return
+
+    def testRegisterFunction_deprecated(self):
+        """Deprecated registerFunction should still work but emit a
+        DeprecationWarning and delegate to register_function."""
+
+        def g(A):
+            return A + 1
+
+        with self.assertWarns(DeprecationWarning):
+            eq = self.m.registerFunction(g, "g")
+        self.m.A.set_value(1.0)
+        self.assertEqual(2.0, eq())
         return
 
     def test_register_string_function(self):
@@ -584,9 +609,19 @@ class TestRecipeOrganizer(unittest.TestCase):
 
         # One more level of embedding
         # 2*y**2
-        eq4 = self.m.registerStringFunction("2*eq3", "eq4")
+        eq4 = self.m.register_string_function("2*eq3", "eq4")
         self.assertEqual(18.0, eq4())
 
+        return
+
+    def test_registerStringFunction_deprecated(self):
+        """Deprecated registerStringFunction should still work but emit
+        a DeprecationWarning and delegate to
+        register_string_function."""
+        with self.assertWarns(DeprecationWarning):
+            eq = self.m.registerStringFunction("x**2 + 3", "eq1")
+        eq.x.set_value(2)
+        self.assertEqual(7, eq())
         return
 
     def test_release_old_equations(self):
@@ -596,11 +631,13 @@ class TestRecipeOrganizer(unittest.TestCase):
         self.assertEqual(0, len(self.m._eqfactory.equations))
         return
 
-    def test_releaseOldEquations(self):
-        """Verify EquationFactory does not hold temporary equations."""
+    def test_evaluateEquation_deprecated(self):
+        """Deprecated evaluateEquation should still work but emit a
+        DeprecationWarning and delegate to evaluate_equation."""
         self.m._new_parameter("x", 12)
-        self.assertEqual(36, self.m.evaluateEquation("3 * x"))
-        self.assertEqual(0, len(self.m._eqfactory.equations))
+        with self.assertWarns(DeprecationWarning):
+            result = self.m.evaluateEquation("3 * x")
+        self.assertEqual(36, result)
         return
 
 

@@ -53,17 +53,19 @@ def optimize_recipe(recipe):
     leastsq(residuals, values)
 
 
-def test_formatResults(build_recipes_one_contribution):
+def test_formatResults_deprecated(build_recipes_one_contribution):
+    """Deprecated formatResults should still work but emit a
+    DeprecationWarning and delegate to get_results_string."""
     recipe, _ = build_recipes_one_contribution
     optimize_recipe(recipe)
     results = FitResults(recipe)
-    actual_results_string = results.formatResults(header="My Custom header")
-    # Because slight variations in refinement, just check
-    # that the header of the results are the same.
-    assert expected_fitresults.strip() in actual_results_string.strip()
-    # check if the refined variables are in the results
-    for expected_var in expected_refined_variables:
-        assert expected_var in actual_results_string.strip()
+    with pytest.deprecated_call():
+        actual_results_string = results.formatResults(
+            header="My Custom header"
+        )
+    assert actual_results_string == results.get_results_string(
+        header="My Custom header", update=False
+    )
 
 
 def test_get_results_string(build_recipes_one_contribution):
@@ -81,18 +83,18 @@ def test_get_results_string(build_recipes_one_contribution):
         assert expected_var in actual_results_string.strip()
 
 
-def test_printResults(build_recipes_one_contribution, capsys):
+def test_printResults_deprecated(build_recipes_one_contribution, capsys):
+    """Deprecated printResults should still work but emit a
+    DeprecationWarning and delegate to print_results."""
     recipe, _ = build_recipes_one_contribution
     optimize_recipe(recipe)
     results = FitResults(recipe)
-    results.printResults(header="My Custom header")
+    with pytest.deprecated_call():
+        results.printResults(header="My Custom header")
     actual_results = capsys.readouterr().out
     # Because slight variations in refinement, just check
     # that the header of the results are the same.
     assert expected_fitresults.strip() in actual_results.strip()
-    # check if the refined variables are in the results
-    for expected_var in expected_refined_variables:
-        assert expected_var in actual_results.strip()
 
 
 def test_print_results(build_recipes_one_contribution, capsys):
@@ -109,21 +111,21 @@ def test_print_results(build_recipes_one_contribution, capsys):
         assert expected_var in actual_results.strip()
 
 
-def test_saveResults(build_recipes_one_contribution, tmp_path):
+def test_saveResults_deprecated(build_recipes_one_contribution, tmp_path):
+    """Deprecated saveResults should still work but emit a
+    DeprecationWarning and delegate to save_results."""
     recipe, _ = build_recipes_one_contribution
     optimize_recipe(recipe)
     results = FitResults(recipe)
     actual_results_file = tmp_path / "fit_results.txt"
-    results.saveResults(actual_results_file, header="My Custom header")
+    with pytest.deprecated_call():
+        results.saveResults(actual_results_file, header="My Custom header")
     assert actual_results_file.exists()
     with open(actual_results_file, "r") as res_file:
         actual_results = res_file.read()
     # Because slight variations in refinement, just check
     # that the header of the results are the same.
     assert expected_fitresults.strip() in actual_results.strip()
-    # check if the refined variables are in the results
-    for expected_var in expected_refined_variables:
-        assert expected_var in actual_results.strip()
 
 
 def test_save_results(build_recipes_one_contribution, tmp_path):
@@ -174,9 +176,14 @@ def test_get_results_dictionary(build_recipes_one_contribution):
 def test_resultsDictionary(temp_data_files):
     # Case: user gets results dictionary from a results file
     # expected: results dictionary contains expected keys and values
-    actual_results_dict = resultsDictionary(
-        temp_data_files / "fit_results.res"
-    )
+    # resultsDictionary is deprecated in favor of
+    # FitResults.get_results_dictionary, but it parses results from a file
+    # rather than a live FitResults instance, so it is not a direct
+    # delegating alias and keeps its own behavioral coverage here.
+    with pytest.deprecated_call():
+        actual_results_dict = resultsDictionary(
+            temp_data_files / "fit_results.res"
+        )
     # bad behavior: values are stored as strings
     expected_results_dict = {
         "than": "25",  # bad behavior: shouldn't be here
@@ -206,7 +213,23 @@ def test_resultsDictionary(temp_data_files):
     assert list(expected_values == list(actual_values))
 
 
-def testInitializeFromFileName(datafile):
+@pytest.mark.parametrize(
+    "as_input",
+    [
+        lambda filename: filename,
+        lambda filename: open(filename, "r"),
+        lambda filename: open(filename, "r").read(),
+    ],
+    ids=["filename", "file_obj", "string"],
+)
+def testInitializeRecipe_deprecated(datafile, as_input):
+    """Deprecated module-level initializeRecipe should still work but
+    emit a DeprecationWarning, for filename, file-object, and string
+    inputs.
+
+    Its replacement, FitRecipe.initialize_recipe_with_results, is
+    exercised in test_fitrecipe.py.
+    """
     recipe = FitRecipe("recipe")
     recipe.create_new_variable("A", 0)
     recipe.create_new_variable("sig", 0)
@@ -216,56 +239,8 @@ def testInitializeFromFileName(datafile):
     sigval = -9.22758690e-01
     x0val = 6.12422115e00
 
-    assert 0 == recipe.A.value
-    assert 0 == recipe.sig.value
-    assert 0 == recipe.x0.value
-    initializeRecipe(recipe, filename)
-    assert Aval == pytest.approx(recipe.A.value)
-    assert sigval == pytest.approx(recipe.sig.value)
-    assert x0val == pytest.approx(recipe.x0.value)
-    return
-
-
-def testInitializeFromFileObj(datafile):
-    recipe = FitRecipe("recipe")
-    recipe.create_new_variable("A", 0)
-    recipe.create_new_variable("sig", 0)
-    recipe.create_new_variable("x0", 0)
-    filename = datafile("results.res")
-    Aval = 5.77619823e-01
-    sigval = -9.22758690e-01
-    x0val = 6.12422115e00
-
-    assert 0 == recipe.A.value
-    assert 0 == recipe.sig.value
-    assert 0 == recipe.x0.value
-    infile = open(filename, "r")
-    initializeRecipe(recipe, infile)
-    assert not infile.closed
-    infile.close()
-    assert Aval == pytest.approx(recipe.A.value)
-    assert sigval == pytest.approx(recipe.sig.value)
-    assert x0val == pytest.approx(recipe.x0.value)
-    return
-
-
-def testInitializeFromString(datafile):
-    recipe = FitRecipe("recipe")
-    recipe.create_new_variable("A", 0)
-    recipe.create_new_variable("sig", 0)
-    recipe.create_new_variable("x0", 0)
-    filename = datafile("results.res")
-    Aval = 5.77619823e-01
-    sigval = -9.22758690e-01
-    x0val = 6.12422115e00
-
-    assert 0 == recipe.A.value
-    assert 0 == recipe.sig.value
-    assert 0 == recipe.x0.value
-    infile = open(filename, "r")
-    resstr = infile.read()
-    infile.close()
-    initializeRecipe(recipe, resstr)
+    with pytest.deprecated_call():
+        initializeRecipe(recipe, as_input(filename))
     assert Aval == pytest.approx(recipe.A.value)
     assert sigval == pytest.approx(recipe.sig.value)
     assert x0val == pytest.approx(recipe.x0.value)
