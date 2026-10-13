@@ -318,6 +318,34 @@ class TestParameterAdapter:
 
         return
 
+    def test_bond_length_restraint_added_after_evaluation(self):
+        # C1: A bond length restraint is added to a molecule in an evaluated
+        # recipe.
+        # Expected: The next residual ends with the restraint's penalty term.
+        from diffpy.srfit import FitContribution, FitRecipe, Profile
+
+        profile = Profile()
+        profile.set_observed_profile(numpy.array([0.0, 1.0]), numpy.zeros(2))
+        contribution = FitContribution("cont")
+        contribution.set_profile(profile)
+        contribution.set_equation("A*x")
+        contribution.A.set_value(0)
+        recipe = FitRecipe()
+        recipe.fithooks[0].verbose = 0
+        recipe.add_contribution(contribution)
+        cryst = ObjCrystCrystalParSet("bucky", self.occryst)
+        recipe.add_parameter_set(cryst)
+        recipe.residual()
+        molecule = cryst.c60
+        restraint = molecule.restrainBondLength(
+            molecule.atoms[0], molecule.atoms[5], 3.3, 0.1, 0.1
+        )
+        actual_residual = recipe.residual()
+        expected_residual = numpy.append(
+            numpy.zeros(2), numpy.sqrt(restraint.penalty())
+        )
+        assert actual_residual == pytest.approx(expected_residual)
+
     def testExplicitBondAngleRestraints(self):
         """Test the structure with explicit bond angles.
 

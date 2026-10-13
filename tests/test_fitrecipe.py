@@ -32,6 +32,7 @@ from diffpy.srfit import (
     ProfileParser,
 )
 from diffpy.srfit.fitbase.parameter import Parameter
+from diffpy.srfit.fitbase.parameterset import ParameterSet
 
 matplotlib.use("Agg")
 
@@ -292,9 +293,6 @@ def test_residual_with_contribution_constraints_and_restraints(
     # Constrain and restrain c through the contribution of an evaluated
     # recipe, then undo each change. Each step changes the recipe left by
     # the step before it, and the residual is evaluated after each step.
-    # A change made on a contribution does not tell the recipe that its
-    # configuration changed, so the recipe is reset by hand after adding or
-    # removing a restraint.
     recipe = build_sine_recipe()
     x, y = recipe.cont.profile.x, recipe.cont.profile.y
     recipe.residual()
@@ -309,7 +307,6 @@ def test_residual_with_contribution_constraints_and_restraints(
     # C2: The contribution also restrains c to zero with sig=1.
     # Expected: As C1, followed by a penalty term of |c - 0| = 2.
     restraint = recipe.cont.add_soft_bounds(recipe.cont.c, 0, 0, 1)
-    recipe._ready = False
     actual_restrained_residual = recipe.residual()
     expected_restrained_residual = np.append(sin(x + 2) - y, 2)
     assert actual_restrained_residual == pytest.approx(
@@ -319,9 +316,69 @@ def test_residual_with_contribution_constraints_and_restraints(
     # to 0.
     # Expected: The residual is zero, with no penalty term.
     recipe.cont.remove_soft_bounds(restraint)
-    recipe._ready = False
     recipe.cont.remove_constraint(recipe.cont.c)
     recipe.cont.c.set_value(0)
+    actual_final_residual = recipe.residual()
+    expected_final_residual = sin(x) - y
+    assert actual_final_residual == pytest.approx(expected_final_residual)
+
+
+@pytest.mark.parametrize(
+    "container_name",
+    [
+        # Test that soft bounds added to, then removed from, an object inside
+        # an evaluated recipe change the next residual.
+        # C1: Soft bounds on a parameter of a ParameterSet in the recipe.
+        # Expected: A penalty term of 2 is added, then removed.
+        "outer",
+        # C2: Soft bounds on a parameter of a ParameterSet nested in another
+        # ParameterSet.
+        # Expected: A penalty term of 2 is added, then removed.
+        "inner",
+    ],
+)
+def test_residual_with_nested_soft_bounds(build_sine_recipe, container_name):
+    recipe = build_sine_recipe()
+    outer = ParameterSet("outer")
+    inner = ParameterSet("inner")
+    outer.add_parameter_set(inner)
+    recipe.add_parameter_set(outer)
+    container = {"outer": outer, "inner": inner}[container_name]
+    parameter = container.new_parameter("p", 2)
+    x, y = recipe.cont.profile.x, recipe.cont.profile.y
+    recipe.residual()
+    restraint = container.add_soft_bounds(parameter, 0, 0, 1)
+    actual_restrained_residual = recipe.residual()
+    expected_restrained_residual = np.append(sin(x) - y, 2)
+    assert actual_restrained_residual == pytest.approx(
+        expected_restrained_residual
+    )
+    container.remove_soft_bounds(restraint)
+    actual_final_residual = recipe.residual()
+    expected_final_residual = sin(x) - y
+    assert actual_final_residual == pytest.approx(expected_final_residual)
+
+
+def test_residual_with_restrained_parameter_set(build_sine_recipe):
+    # Add, then remove, a ParameterSet holding soft bounds on an evaluated
+    # recipe. The residual is evaluated after each step.
+    recipe = build_sine_recipe()
+    x, y = recipe.cont.profile.x, recipe.cont.profile.y
+    recipe.residual()
+    parameter_set = ParameterSet("parset")
+    parameter = parameter_set.new_parameter("p", 2)
+    parameter_set.add_soft_bounds(parameter, 0, 0, 1)
+    # C1: The ParameterSet is added to the recipe.
+    # Expected: A penalty term of 2 is added to the residual.
+    recipe.add_parameter_set(parameter_set)
+    actual_restrained_residual = recipe.residual()
+    expected_restrained_residual = np.append(sin(x) - y, 2)
+    assert actual_restrained_residual == pytest.approx(
+        expected_restrained_residual
+    )
+    # C2: The ParameterSet is removed from the recipe.
+    # Expected: The penalty term is removed from the residual.
+    recipe.remove_parameter_set(parameter_set)
     actual_final_residual = recipe.residual()
     expected_final_residual = sin(x) - y
     assert actual_final_residual == pytest.approx(expected_final_residual)
